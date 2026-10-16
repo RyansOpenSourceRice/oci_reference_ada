@@ -1,0 +1,3 @@
+[codespell]
+# GNAT/GPRbuild/gnatprove outputs are generated; never spell-check them.
+skip = */obj/*,*/lib/*,*/bin/*,*.ali,*.o,*.a,b__*.adb,*.sarif

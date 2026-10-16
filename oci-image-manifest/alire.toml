@@ -1,0 +1,8 @@
+name = "oci_image_manifest"
+description = "OCI image manifest structural validation in Ada (SPARK Silver)"
+version = "0.1.0"
+licenses = "Apache-2.0"
+website = "https://github.com/RyansOpenSourceRice/oci_reference_ada"
+tags = ["oci", "container", "parser", "spark"]
+
+[configuration.values]

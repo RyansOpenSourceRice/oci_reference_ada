@@ -1,5 +1,14 @@
-# Object file
-*.o
-
-# Ada Library Information
+# GNAT / GPRbuild artifacts
+obj/
+lib/
+bin/
 *.ali
+*.o
+*.a
+b__*.adb
+# GNATprove artifacts
+*.sarif
+gnatprove/
+# Alire lock / build metadata (keep alire.toml, not the workspace state)
+alire/
+*.lock
