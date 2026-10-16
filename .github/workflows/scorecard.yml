@@ -1,0 +1,50 @@
+# OpenSSF Scorecard — supply-chain health, SARIF to code scanning.
+# Separate file: weekly schedule must not re-run the full CI matrix.
+# Docs: https://github.com/ossf/scorecard-action (v2.5.0, Oct 2026).
+
+name: scorecard
+
+on:
+  branch_protection_rule:
+  schedule:
+    - cron: "30 1 * * 1"
+  push:
+    branches: [main]
+
+# Least privilege: only the analysis job gets write scopes.
+permissions: read-all
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-24.04
+    permissions:
+      security-events: write # upload SARIF to code scanning
+      contents: read
+      actions: read
+      id-token: write # publish results to OpenSSF (public repo)
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Run analysis
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: SARIF file
+          path: results.sarif
+          retention-days: 5
+
+      - name: Upload to code-scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          sarif_file: results.sarif
