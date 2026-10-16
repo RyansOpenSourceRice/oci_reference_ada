@@ -5,6 +5,10 @@ on:
     branches: [main, dev]
   pull_request:
 
+# Least privilege: jobs only read the repo (Scorecard Token-Permissions).
+permissions:
+  contents: read
+
 env:
   ALIRE_VERSION: "2.1.1"
   GNAT_VERSION: "16.1.0"
@@ -85,6 +89,7 @@ jobs:
 
       - name: Install Alire
         run: |
+          mkdir -p ~/.local/bin
           curl -L -o alr-bin \
             "https://github.com/alire-project/alire/releases/download/v${ALIRE_VERSION}/alr-${ALIRE_VERSION}-bin-x86_64-linux.zip"
           unzip -j alr-bin -d ~/.local/bin
