@@ -1,0 +1,131 @@
+name: ci
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+env:
+  ALIRE_VERSION: "2.1.1"
+  GNAT_VERSION: "16.1.0"
+  GPRBUILD_VERSION: "26.0.1"
+  BETTERLEAKS_VERSION: "1.9.0"
+  OPENGREP_VERSION: "1.31.0"
+  TRIVY_VERSION: "0.76.0"
+  CODESPELL_VERSION: "2.4.3"
+
+jobs:
+  secrets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Betterleaks scan (fail-closed)
+        run: |
+          curl -sL -o /tmp/betterleaks.tgz \
+            "https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/betterleaks_${BETTERLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf /tmp/betterleaks.tgz -C /tmp
+          /tmp/betterleaks dir .
+
+  spell:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Codespell
+        run: |
+          pip install "codespell==${CODESPELL_VERSION}"
+          codespell
+
+  sast:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: OpenGrep scan
+        run: |
+          curl -sL -o /tmp/opengrep \
+            "https://github.com/opengrep/opengrep/releases/download/v${OPENGREP_VERSION}/opengrep_manylinux_x86"
+          chmod +x /tmp/opengrep
+          /tmp/opengrep scan --config auto --error .
+
+  vuln:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Trivy filesystem scan
+        run: |
+          curl -sL -o /tmp/trivy.tgz \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          tar -xzf /tmp/trivy.tgz -C /tmp trivy
+          /tmp/trivy fs --severity HIGH,CRITICAL --exit-code 1 .
+
+  pre-commit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Same pre-commit suite developers run locally
+        run: |
+          curl -sL -o /tmp/betterleaks.tgz \
+            "https://github.com/betterleaks/betterleaks/releases/download/v${BETTERLEAKS_VERSION}/betterleaks_${BETTERLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf /tmp/betterleaks.tgz -C /tmp
+          export PATH="/tmp:$PATH"
+          pip install pre-commit
+          pre-commit run --all-files --show-diff-on-failure
+
+  build-test-prove:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install Alire
+        run: |
+          curl -L -o alr-bin \
+            "https://github.com/alire-project/alire/releases/download/v${ALIRE_VERSION}/alr-${ALIRE_VERSION}-bin-x86_64-linux.zip"
+          unzip -j alr-bin -d ~/.local/bin
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Select toolchain
+        run: |
+          alr toolchain --select gnat_native=${GNAT_VERSION} --disable-assistant
+          alr toolchain --select gprbuild=${GPRBUILD_VERSION} --disable-assistant
+
+      - name: Fetch GNATprove (index crate)
+        run: |
+          mkdir -p ~/ada-tools
+          (cd ~/ada-tools && alr get gnatprove=${GNAT_VERSION})
+          echo "$HOME"/ada-tools/gnatprove_${GNAT_VERSION}_*/bin >> "$GITHUB_PATH"
+
+      - name: Build, test, and prove oci-reference
+        working-directory: oci-reference
+        run: |
+          alr exec -- gprbuild -P oci_reference.gpr
+          alr exec -- gprbuild -P tests/tests.gpr
+          ./tests/bin/test_reference
+          alr exec -- gprbuild -P examples/examples.gpr
+          alr exec -- gnatprove -P oci_reference.gpr --level=2
+
+      - name: Build, test, and prove oci-image-manifest
+        working-directory: oci-image-manifest
+        run: |
+          alr exec -- gprbuild -P oci_image_manifest.gpr
+          alr exec -- gprbuild -P tests/tests.gpr
+          ./tests/bin/test_manifest
+          alr exec -- gprbuild -P examples/examples.gpr
+          alr exec -- gnatprove -P oci_image_manifest.gpr --level=2
+
+      - name: Build, test, and prove oci-layer-apply
+        working-directory: oci-layer-apply
+        run: |
+          alr exec -- gprbuild -P oci_layer_apply.gpr
+          alr exec -- gprbuild -P tests/tests.gpr
+          ./tests/bin/test_apply
+          alr exec -- gprbuild -P examples/examples.gpr
+          ./examples/bin/ex1_order
+          ./examples/bin/ex2_whiteout
+          alr exec -- gnatprove -P oci_layer_apply.gpr --level=2
